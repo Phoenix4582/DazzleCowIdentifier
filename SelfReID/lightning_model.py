@@ -9,7 +9,7 @@ import torchvision
 from torchvision.models import *
 import lightning as L
 import csv
-from sklearn.cluster import DBSCAN, HDBSCAN
+from sklearn.cluster import KMeans, DBSCAN, HDBSCAN
 import joblib
 from itertools import product
 
@@ -144,43 +144,49 @@ class SelfReIDModel(L.LightningModule):
         # For cosine metrics, normalise embeddings in l2-norm
         embd = normalize(embd, norm='l2', axis=1)
 
+        # KMeans, more suitable than DBSCAN for our centroid-based clustering
+        n_clusters = len(np.unique(gt_labels))
+        kmeans = KMeans(n_clusters=n_clusters, n_init=50, max_iter=500, random_state=42, verbose=0)
+        assumed_labels = kmeans.fit_predict(embd)
         # Default DBSCAN, need to tune eps and min_samples
         # clustering = DBSCAN(eps=0.5, min_samples=5, metric='cosine').fit(embd)
 
         # HDBSCAN, automatically finds the best clusters
-        if mode in ['val', 'test', 'predict']:
-            cluster_sizes = [10, 20, 30, 40, 50, 60]
-            num_min_samples = [3, 5, 7, 10, 15, 20]
-            best_ari = float('-inf')
-            assumed_labels = None
-            best_heuristics = None
-            hdbscan_heuristics = list(product(cluster_sizes, num_min_samples))
-            for heuristic in hdbscan_heuristics:
-                min_cluster_size, min_samples = heuristic
-                if min_samples > min_cluster_size:
-                    continue
-                clustering = HDBSCAN(
-                        min_cluster_size=min_cluster_size,
-                        min_samples=min_samples,         # controls conservativeness; set equal to or smaller than min_cluster_size
-                        metric='cosine',
-                        cluster_selection_epsilon=0.1,
-                        ).fit(embd)
-                prod_labels = clustering.labels_
-                ari = evaluate_clustering_with_gt(prod_labels, gt_labels)['adjusted_rand_index']
-                if ari > best_ari:
-                    assumed_labels = prod_labels
-                    best_ari = ari
-                    best_heuristics = heuristic
+        # if mode in ['val', 'test', 'predict']:
+        #     cluster_sizes = [10, 20, 30, 40, 50, 60]
+        #     num_min_samples = [3, 5, 7, 10, 15, 20]
+        #     best_ari = float('-inf')
+        #     assumed_labels = None
+        #     best_heuristics = None
+        #     hdbscan_heuristics = list(product(cluster_sizes, num_min_samples))
+        #     for heuristic in hdbscan_heuristics:
+        #         min_cluster_size, min_samples = heuristic
+        #         if min_samples > min_cluster_size:
+        #             continue
+        #         clustering = HDBSCAN(
+        #                 min_cluster_size=min_cluster_size,
+        #                 min_samples=min_samples,         # controls conservativeness; set equal to or smaller than min_cluster_size
+        #                 metric='cosine',
+        #                 cluster_selection_epsilon=0.1,
+        #                 ).fit(embd)
+        #         prod_labels = clustering.labels_
+        #         ari = evaluate_clustering_with_gt(prod_labels, gt_labels)['adjusted_rand_index']
+        #         if ari > best_ari:
+        #             assumed_labels = prod_labels
+        #             best_ari = ari
+        #             best_heuristics = heuristic
 
-            print(f"Best heuristics: {best_heuristics}")
+        #     print(f"Best heuristics: {best_heuristics}")
 
         if mode in ['test', 'predict']:
             mode_save = True if mode == 'test' else False
             # self.umap = joblib.load(os.path.join(self.save_path, 'umap_model.joblib')) # Unsure if reloading umap during training is necessary
             self.umap.fit(embd)
             self.embed_ump[mode] = self.umap.transform(embd)
-            scatter(self.embed_ump[mode], labels=np.array(gt_labels), title=f"Test Epoch UMAP Visualisation", filename=os.path.join(self.save_path, 'visualisations', mode, f'{mode}_umap_gt_labelled.png'))
-            scatter(self.embed_ump[mode], labels=np.array(gt_labels), title=f"Test Epoch UMAP Visualisation", filename=os.path.join(self.save_path, 'visualisations', mode, f'{mode}_umap_gt_labelled.pdf'))
+            scatter(self.embed_ump[mode], labels=np.array(gt_labels), title=f"Test Epoch UMAP Visualisation on GT", filename=os.path.join(self.save_path, 'visualisations', mode, f'{mode}_umap_gt_labelled.png'))
+            scatter(self.embed_ump[mode], labels=np.array(gt_labels), title=f"Test Epoch UMAP Visualisation on GT", filename=os.path.join(self.save_path, 'visualisations', mode, f'{mode}_umap_gt_labelled.pdf'))
+            scatter(self.embed_ump[mode], labels=assumed_labels, title=f"Test Epoch UMAP Visualisation on KMeans Predictions", filename=os.path.join(self.save_path, 'visualisations', mode, f'{mode}_umap_pred_labelled.png'))
+            scatter(self.embed_ump[mode], labels=assumed_labels, title=f"Test Epoch UMAP Visualisation on KMeans Predictions", filename=os.path.join(self.save_path, 'visualisations', mode, f'{mode}_umap_pred_labelled.pdf'))
             print("\n"+"-"*20 + "KNN Metrics" + "-"*20)
             print(f"{mode.title()} Mode: KNN Probe Accuracy: {KNNProbe(embd, np.array(gt_labels))}")
             label_log_entry = evaluate_clustering_with_gt(assumed_labels, gt_labels)
@@ -280,3 +286,4 @@ class SelfReIDModel(L.LightningModule):
                 print(f"{mode.title()} Mode: {k}: {v}")
                 if save:
                     self.log(mode+"_"+k, v, prog_bar=False, on_step=False, on_epoch=True)
+
