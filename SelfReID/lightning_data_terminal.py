@@ -269,8 +269,8 @@ class MultiSelfReIDDataModule(LightningDataModule):
         result = []
         for folder in folders:
             all_subfolders = sorted(os.listdir(folder))
-            half_subfolders = all_subfolders[:(len(all_subfolders)//3)]
-            for subfolder in half_subfolders:
+            # half_subfolders = all_subfolders[:(len(all_subfolders)//3)] # subset for quick testing
+            for subfolder in all_subfolders:
                 base_folder = os.path.join(folder, subfolder)
                 result.extend(sorted([os.path.join(base_folder, item) for item in os.listdir(base_folder)]))
         return result
@@ -317,3 +317,4 @@ class MultiSelfReIDDataModule(LightningDataModule):
     #                       shuffle=False,
     #                       num_workers=self.num_workers,
     #                       collate_fn=custom_collate_fn)
+
