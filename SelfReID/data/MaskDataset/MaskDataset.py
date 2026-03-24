@@ -95,7 +95,7 @@ class MaskDataset(data.Dataset):
             if timestamp_cur in timestamps_info.keys():
                 timestamps_info[timestamp_cur].append(i)
             else:
-                timestamps_info.update({timestamp_cur: []})
+                timestamps_info.update({timestamp_cur: [i]})
 
         return timestamps_info
 
@@ -108,6 +108,6 @@ class MaskDataset(data.Dataset):
             if entry in timestamps_info.keys():
                 timestamps_info[entry].append(i)
             else:
-                timestamps_info.update({entry: []})
+                timestamps_info.update({entry: [i]})
 
         return timestamps_info
